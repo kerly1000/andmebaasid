@@ -388,3 +388,122 @@ select PM.Name as ProductModel, P.Name as Product
 from SalesLT.Product P
 left join SalesLT.ProductModel PM
 on PM.ProductModelid = P.ProductModelId
+
+
+--31.03.2026
+
+select ISNULL('Sinu Nimi', 'No Manager') as Manager
+
+select coalesce(null, 'No Manager') as Manager
+
+--neil, kellel ei ole ülemust, sis paneb neile No Manager teksti
+select E.Name as Employee, ISNULL(M.Name, 'No Manager') as Manager
+from Employees E
+left join Employees M
+on E.ManagerId = M.Id
+
+--kui Expression on õige, siis paneb väärtuse, mida soovid või vastasel juhul paneb No manager
+case when Expression Then '' else '' end
+
+
+--teeme päringu, kus kasutame case-i
+--tuleb kasutada ka left joini
+select E.Name as Employee, case when M.Name is null Then 'No Manager'
+else M.Name end as Manager
+from Employees E
+left join Employees M
+on E.ManagerId = M.Id
+
+--lisame tabelisse uued veerud
+alter table Employees
+add MiddleName nvarchar(30)
+alter table Employees
+add LastName nvarchar(30)
+
+--muudame veeru nime koodiga
+sp_rename 'Employees.MiddleName1', 'MiddleName'
+select* from Employees
+
+update Employees 
+set FirstName = 'James', MiddleName = '007', LastName = 'Bond'
+where ID = 9
+
+--igast reast võtab esimenesena mitte nulli väärtuse ja paneb Name veeru 
+--kasutada coalesce
+
+select Id, coalesce(FistName, middleName, LastName) as Name
+from Employees
+
+create table indianCostumers
+(
+Id int identity(1,1),
+Name nvarchar(25),
+Email nvarchar(25)
+)
+
+create table UKCostumers
+(
+Id int identity(1,1),
+Name nvarchar(25),
+Email nvarchar(25)
+)
+
+insert into UKCostumers (Name, Email)
+values ('Ben', 'b@b.com'),
+('Sam', 's@s.com')
+
+
+insert into indianCostumers (Name, Email)
+values ('Raj', 'r@r.com'),
+('Sam', 's@s.com')
+
+select * from IndianCustomers
+select * from UKCustomers
+
+--kasutate union all
+--kahe tabeli andmete vaatamiseks
+
+--näitab kõik read mõlemas tabelis
+SELECT * FROM IndianCustomers
+UNION ALL
+SELECT * FROM UKCustomers
+
+--korduvate väärtuste eemaldamiseks kasutame unionit
+SELECT * FROM IndianCustomers
+UNION 
+SELECT * FROM UKCustomers
+
+--kuidas tulemust sorteerida nime järgi
+--union all
+SELECT * FROM IndianCustomers
+UNION ALL
+SELECT * FROM UKCustomers
+order by Name
+
+--stored procedure
+--salvestatud protseduurid on SQL-i koodid, mis on salvestatud andmebaasis ja mida saab
+--käivitada, et teha mingi kindel töö ära
+create procedure spGetEmployees
+as begin
+	select FirstName, Gender from Employees
+end
+
+--nüüd saame kasutada spGetEmployees-i
+spGetEmployees
+exec spGetEmployees
+execute spGetEmployees
+
+---
+create proc spGetEmployeesByGenderAndDepartment
+@Gender nvarchar(50),
+@DepartmentId int
+as begin
+	select FirstName, Gender, DepartmentId from Employees 
+	where Gender = @Gender and DepartmentId = DepartmentId
+end
+
+--miks saab veateate 
+spGetEmployeesByGenderAndDepartment
+--õige variant
+spGetEmployeesByGenderAndDepartment 'male', 1
+
