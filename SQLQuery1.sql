@@ -1227,3 +1227,153 @@ Name nvarchar(25),
 Salary int,
 Gender nvarchar(10)
 )
+
+insert into EmployeeWithSalary(Id, Name, Salary, Gender)
+values (1, 'Sam', 2500, 'Male'),
+(2, 'Pam', 6500, 'Female'),
+(3, 'John', 4500, 'Male'),
+(4, 'Sara', 5500, 'Female'),
+(5, 'Todd', 3100, 'Male')
+
+select * from EmployeeWithSalary
+where Salary > 5000 and Salary < 7000
+
+--loome indeksi, mis asetab palga kahanevasse järjestusse
+create index IX_Employee_Salary
+on employeeWithSalary(Salary desc)
+
+--päri tabelit EmployeeWithSalary ja kasuta indeksit IX_Employee_Salary
+select * from EmployeeWithSalary with (index(IX_Employee_Salary))
+
+--indeksi kustutamine
+drop index IX_EmployeeSalary on EmployeeWithSalary
+drop index EmployeeWithSalary.IX_Employee_Salary
+
+select * from EmployeeWithSalary
+order by Salary desc
+
+--- indeksi tüübid:
+--1. klastrites olevad
+--2. mitte-klastris olevad
+--3. unikaalsed
+--4.filtreeritud
+--5. XML
+--6. täistekst
+--7. ruumiline
+--8. veerusäilitav
+--9. veergude indeksid
+--10. välja arvatud veergudega indeksid
+
+-- klastris olev indeks määrab ära tabelis oleva füüsilise järjestuse ja selle tulemusel saab tabelis olla ainult
+--üks klastris olev indeks. see on alati primaarvõti
+-- kui lisad primaarvõtme, siis luuakse automaatselt klastris olev indeks
+
+create table EmployeeCity
+(
+Id int primary key,
+Name nvarchar(25),
+Salary int,
+Gender nvarchar(10),
+City nvarchar(20)
+)
+
+--andmete õige järjestuse loovad klastris olevad indeksid ja kasutab selleks Is nr-it
+--põhjus, miks antud juhul kasutab id-d, tuleneb primaarvõtmest
+insert into EmployeeCity values(3, 'John', 4500, 'Male', 'New York')
+insert into EmployeeCity values(1, 'Sam', 2500, 'Male', 'London')
+insert into EmployeeCity values(4, 'Sara', 5500, 'Female', 'Tokyo')
+insert into EmployeeCity values(5, 'Todd', 3100, 'Male', 'Toronto')
+insert into EmployeeCity values(2, 'Pam', 6500, 'Male', 'Sydney')
+
+select * from EmployeeCity
+
+--klastris olevad indeksid dikteerivad säilitatud andmete järjestuse tabelis ja seda saab olla klastrite 
+--puhul olla ainult 1
+create clustered index IX_EmployeeCity_Name
+on EmployeeCity(Name)
+--annab veateate, et tabelis saab olla ainut 1 klastris olev indeks. kui soovid uut, kustuta olemasolev ära
+
+--saame luua ainult ühe klastris oleva indeksi tabeli kohta. analoogne telefoninumbrile, st kordumatu
+--enne seda päringut kustutasime indeksi ära
+select * from EmployeeCity
+
+--MITTE KLASTRIS olev index
+create nonclustered index IX_EmployeeCity_Name123
+on EmployeeCity(Name)
+
+exec sp_helpindex EmployeeCity
+
+select * from EmployeeCity
+
+--erinevused kahe indeksi vahel
+--ainult 1 klastris olev indeks saab olla tabeli peale, mitte klastris olevaid saab olla tabelis mitu
+--klastris olevad indeksid on kiiremad, kuna indeks peab tagasi viitama tabelile
+--juhul, kui selekteeritud veerg ei ole olemas indeksis:
+--klastris olev indeks määratleb ära tabeli ridade salvestusjärjestuse
+--ja ei nõua kettal lisarummi. Samas mitte klastris olevad indeksid on salvestatud tabelist eraldi ja nõuab
+--lisaruumi
+
+create table EmployeeFirstName
+(
+Id int primary key,
+FirstName nvarchar(25),
+Lastname nvarchar(25),
+Salary int,
+Geder nvarchar(10),
+City nvarchar(20)
+)
+
+--sisestame andmed tabelisse
+insert into EmployeeFirstName 
+values
+(1, 'Mike', 4500, 'Male', 'New York'),
+(1, 'John', 2500, 'Male', 'London')
+
+--kustutame indeksi ära 
+drop index PK__Employee__3214EC07D5866CA8
+--koodiga unikaalseid indekseid ei saa kustutada, käsitsi saab
+
+insert into EmployeeFirstName 
+values
+(1, 'Mike', 'Sandoz', 4500, 'Male', 'New York'),
+(1, 'John', 'Menco', 2500, 'Male', 'London')
+
+create unique nonclustered index IX_Employee_FirstName_FirstName
+on EmployeeFirstName(FirstName, LastName)
+
+insert into EmployeeFirstName 
+values
+(1, 'Mike', 'Sandoz', 4500, 'Male', 'New York'),
+(1, 'John', 'Menco', 2500, 'Male', 'London')
+--alguses annab veateate, et mike sandozt on kaks korda. ei saa lisada mitte klastris olevat indesit
+--kui ei ole unikaalseid andmeid.
+-- kustutame tabeli ja sisestame uue
+
+drop table EmployeeFirstName
+
+create table EmployeeFirstName
+(
+Id int primary key,
+FirstName nvarchar(25),
+Lastname nvarchar(25),
+Salary int,
+Geder nvarchar(10),
+City nvarchar(20)
+)
+
+insert into EmployeeFirstName 
+values
+(1, 'Mike', 'Sandoz', 4500, 'Male', 'New York'),
+(2, 'John', 'Menco', 2500, 'Male', 'London')
+
+--lisame uue unikaalse piirangu
+alter table EmployeeFirstName
+add constraint UQ_Employee_FirstName_City
+unique nonclustered(City)
+
+insert into EmployeeFirstName
+values
+(3, 'John', 'Menco', 4500, 'Male', 'London')
+
+
+
