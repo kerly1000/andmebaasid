@@ -1109,3 +1109,121 @@ update fn_GetEmployees() set Name = 'Sara' where Id = 4  --saad muuta andmeid lä
 select * from EmployeesWithDates
 update fn_MS_GetEmployees() set Name = 'Sara' where Id = 4
 --ei saa muut andmeid multistate table valued funktsioonis, sest see on stored procedure
+
+--21.04.2026
+
+--determnistic vs nondetermnistic functions
+select COUNT(*) from EmployeesWithDates
+--kõik tehtemärgid on deterministic, sest nad annavad alati sama tulemuse, kui sisend on sama
+--siia kuuluvad veel sum, avg, min, max, count
+select SQUARE(3)
+
+--non ettemääratud funktsioonid võivad anda erinevaid tulemusi
+select GETDATE() -- kuna se annab alati jooksva aja, siis on nondeterministic ehk mitte määratud erinev tulemus
+select CURRENT_TIMESTAMP
+select RAND()
+
+--loome funktsiooni (leiad skaleeritavate alt)
+create function fn_GetNameById(@id int)
+returns nvarchar(20)
+as begin
+	return (select Name from EmployeesWithDates where Id = @id)
+end
+
+--kuidas saab kasutada fn_GetNameById funktsiooni
+select dbo.fn_GetNameById(3)
+--sellega saab näha funktsiooni sisu
+sp_helptext fn_GetNameById
+
+--muuta funktsiooni fn_GetNameById ja krüpteerida see ära, et keegi teine
+--peale sinu ei saaks seda muuta ega näha
+alter function fn_GetNameById(@id int)
+returns nvarchar(20)
+with encryption --paneb võtme peale
+as begin
+	return (select Name from EmployeesWithDates where Id = @id)
+end
+--krüptitud funktsiooni sisu helptext ei näita
+
+create function fn_GetEmployeeNameById(@id int)
+returns nvarchar(20)
+with schemabinding
+as begin
+	return (select Name from EmployeesWithDates where Id = @id)
+end
+--tuleb veateade Cannot schema bind function 'fn_GetEmployeeNameById' because name 'EmployeesWithDates' is invalid 
+--for schema binding. Names must be in two-part format and an object cannot reference itself.
+
+--nüüd on korras variant
+create function dbo.fn_GetEmployeeNameById(@id int)
+returns nvarchar(20)
+with schemabinding
+as begin
+	return (select Name from dbo.EmployeesWithDates where Id = @id)
+end
+--mis on schemabinging?
+--st kui ma tahame teha muudatusi tabelis EmployeesWithDates, me peame kõigepealt eemaldama funktsiooni 
+--fn_GetEmployeesNameById, sest see on seotud tabeliga EmployeesWithDates. kustuta funktsioon ära.
+
+--schemabinding seob päringus oleva tabeli ära ja ei luba seda muuta
+--mis see annab meile?
+--see annab meile jõudluse eelise, sest sql server teab, et see tabel veergude osas ei muutu
+
+--ei saa tabelit kustutada, kui sellel on schemabindinguga seotud funktsioon küljes. 
+drop table EmployeesWithDates
+
+create function dbo.fn_GetEmployeeNameById123(@id int)
+returns nvarchar(20)
+with encryption, schemabinding
+as begin
+	return (select Name from dbo.EmployeesWithDates where Id = @id)
+end
+
+--temporary tables 
+--need on loodud ajutiselt ja kustutatakse automaatselt
+--neid on kahte tüüpi- local temporary tables ja global temporary tables
+--#-ga algavad lokaalsed, ##-ga algavad globaalsed
+
+create table #PersonDetails(Id int, Name nvarchar (20))
+--ajutine tabel tekib süsteemi database temp andmebaasi
+insert into #PersonDetails values(1, 'Mike')
+insert into #PersonDetails values(2, 'Max')
+insert into #PersonDetails values(3, 'Uhura')
+go 
+select * from #PersonDetails
+
+--saame otsida seda objekti üles
+select Name from sysobjects
+where name like '#PersonDetails%'
+
+--kustatuame tabeli ära
+drop table #PersonDetails
+
+--teeme stored procedure, mis loob local temporary table-i ja täitab selle andmetega
+create proc spCreateLocalTempTable
+as begin
+create table #PersonDetails(Id int, Name nvarchar(20))
+
+insert into #PersonDetails values(1, 'Mike')
+insert into #PersonDetails values(2, 'Max')
+insert into #PersonDetails values(3, 'Uhura')
+
+select * from #PersonDetails
+end
+---
+exec spCreateLocalTempTable
+
+--globaalse tabeli loomine
+create table ##GlobalPersonDetails(Id int, Name nvarchar(20))
+--mis on globaalse ja lokaalse tabeli erinevus
+--globaalset tabelit saab kasutada ja jagada kõikides sessioonides, lokaalne on nähtav ainult seal sessioonis, kus
+--see on loodud
+
+--index
+create table EmployeeWithSalary
+(
+id int primary key,
+Name nvarchar(25),
+Salary int,
+Gender nvarchar(10)
+)
