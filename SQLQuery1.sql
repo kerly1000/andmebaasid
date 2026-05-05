@@ -1648,7 +1648,23 @@ delete from Employees where Id = 11
 
 select * from EmployeeAudit
 
---update trigger
+create trigger trEmployeeForDelete
+on Employees
+for delete
+as begin
+	declare @Id int
+	select @Id = Id from deleted
+
+	insert into EmployeeAudit
+	values('An existing employee with Id = ' + cast(@Id as nvarchar(5)) + 
+	' is deleted at ' + cast(getdate() as nvarchar(20)))
+end
+
+delete from Employees where Id = 11
+
+select * from EmployeeAudit
+
+--- update trigger
 create trigger trEmployeeForUpdate
 on Employees
 for update
@@ -1667,36 +1683,325 @@ as begin
 	--muutuja, kuhu läheb lõpptekst
 	declare @AuditString nvarchar(1000)
 
-	--laeb kõik uuendatud andmed temporary table alla
+	--laeb kõik uuendatud andmed temp tabeli alla
 	select * into #TempTable
 	from inserted
 
-	--käib läbi kõik andmed temp table-is
+	--käib läbi kõik andmed temp tabel-s
 	while(exists(select Id from #TempTable))
 	begin
 		set @AuditString = ''
-	--selektrrib esimese rea andmed temp table-st
+	--selekteerib esimese rea andmed  temp tabel-st
 	select top 1 @Id = Id, @NewGender = Gender,
-	@NewSalary = Salary, @NewDepartmentId = DepartmentId, 
+	@NewSalary = Salary, @NewDepartmentId = DepartmentId,
 	@NewManagerId = ManagerId, @NewFirstName = FirstName,
 	@NewMiddleName = MiddleName, @NewLastName = LastName,
 	@NewEmail = Email
 	from #TempTable
-	--võtab vanad andmed kustutatud tablemist
-	@OldGender = Gender,
-	@OldSalary = Salary, @OldDepartmentId = DepartmentId, 
+	--võtab vanad andmed kustutatud tabelist
+	select @OldGender = Gender,
+	@OldSalary = Salary, @OldDepartmentId = DepartmentId,
 	@OldManagerId = ManagerId, @OldFirstName = FirstName,
 	@OldMiddleName = MiddleName, @OldLastName = LastName,
 	@OldEmail = Email
 	from deleted where Id = @Id
 
-	--toimub võrdlus veergude osas, kas toimus andmete muutmine
-	set @AuditString = 'Employee with Id = ' + CAST(@Id as nvarchar(4)) + ' changed '
-	if (@OldGender <> @NewGender)
+
+	--toimub v]rdlus veergude osas, et kas toimus andmete muutmine
+	set @AuditString = 'Employee with Id = ' + cast(@Id as nvarchar(4)) + ' changed '
+	if(@OldGender <> @NewGender)
 		set @AuditString = @AuditString + ' Gender from ' + @OldGender + ' to ' +
 		@NewGender
 
-	if (@OldSalary <> @NewSalary)
-		set @AuditString = @AuditString + ' Salary from ' + cast(@OldSalary as nvarchar(20) 
+	if(@OldSalary <> @NewSalary)
+		set @AuditString = @AuditString + ' Salary from ' + cast(@OldSalary as nvarchar(20))
 		+ ' to ' + cast(@NewSalary as nvarchar(10))
+
+
+	if(@OldDepartmentId <> @NewDepartmentId)
+		set @AuditString = @AuditString + ' DepartmentId from ' + cast(@OldDepartmentId as nvarchar(20))
+		+ ' to ' + cast(@NewDepartmentId as nvarchar(10))
+
+	if(@OldManagerId <> @NewManagerId)
+		set @AuditString = @AuditString + ' ManagerId from ' + cast(@OldManagerId as nvarchar(20))
+		+ ' to ' + cast(@NewManagerId as nvarchar(10))
+
+	if(@OldFirstName <> @NewFirstName)
+		set @AuditString = @AuditString + ' FirstName from ' + @OldFirstName + ' to ' +
+		@NewFirstName
+
+	if(@OldMiddleName <> @NewMiddleName)
+		set @AuditString = @AuditString + ' MiddleName from ' + @OldMiddleName + ' to ' +
+		@NewMiddleName
+
+	if(@OldLastName <> @NewLastName)
+		set @AuditString = @AuditString + ' LastName from ' + @OldLastName + ' to ' +
+		@NewLastName
+
+	if(@OldEmail <> @NewEmail)
+		set @AuditString = @AuditString + ' Email from ' + @OldEmail + ' to ' +
+		@NewEmail
+
+	insert into dbo.EmployeeAudit values (@AuditString)
+	-- kustutab temp tabelist rea, et saaksime liikuda uue rea juurde
+	delete from #TempTable where Id = @Id
+	end
 end
+------
+
+update Employees set FirstName = 'test1256', Salary = 3999, MiddleName = 'test987'
+where Id = 10
+
+select * from Employees
+select * from EmployeeAudit
+
+--instead of trigger
+create table Employee
+(
+Id int primary key, 
+Name nvarchar(30),
+Gender nvarchar(10),
+DepartmentId int
+)
+
+select * from Employee
+
+insert into Employee (Id, Name, Gender, DepartmentId)
+values (1, 'John', 'Male', 3),
+(2, 'Mike', 'Male', 2),
+(3, 'Pam', 'Female', 1),
+(4, 'Todd', 'Male', 4),
+(5, 'Sara', 'Female', 1),
+(6, 'Ben', 'Male', 3)
+
+--instead of triggeri eripära seisneb sellest, et kasutab view-d
+create view vEmployeeDetails
+as
+select Employee.Id, Name, Gender, DepartmentName
+from Employee
+join Department
+on Employee.DepartmentId = Department.Id
+
+select * from vEmployeeDetails
+
+insert into vEmployeeDetails values(7, 'Valarie', 'Female', 'IT')
+--tuleb veateade, sest vaade sisaldab mitu tabelit
+--vaatame, kuidas saab instead of triggeriga seda probleemi lahendada
+
+create trigger tr_vEmployeeDetails_InsteadOfInsert
+on vEmployeeDetails
+instead of insert
+as begin
+	declare @DeptId int
+
+	select @DeptId = dbo.Department.Id
+	from Department
+	join inserted
+	on inserted.DepartmentName = Department.DepartmentName
+
+	if(@DeptId is null)
+		begin
+		raiserror('Invalid department name. Statement terminated', 16, 1)
+		return
+	end
+
+	insert into dbo.Employee(Id, Name, Gender, DepartmentId)
+	select Id, Name, Gender, @DeptId
+	from inserted
+end
+
+---raiserror funktsioon
+-- selle eesmärk on tuua välja veateade, kui Department veerus ei ole väärtust
+-- ja ei klapi uue sisestatud väärtusega
+--esimene on parameeter ja veateate sisu, teine on veataseme nr (16 tähendab üldiseid) kolmas on olek
+
+delete from Employees where Id = 7
+
+--kasuta update juures viewd nimega vÉmployeeDetails
+--nimi on tal Johnnu ja osakonnal IT ning Id on 1 
+
+update vEmployeeDetailsset Name = 'Johny', DepartmentName = 'IT'
+where Id = 1
+---ei saa uuendada andmeid, kuna mitu tabelit on mõjutatud
+
+update vEmployeeDetails
+set DepartmentName  = 'IT'
+where Id = 1
+
+--nüüd kasutame view-d triggeri sees
+create trigger tr_vEmployeeDetails_InsteadOfUpdate
+on vEmployeeDetails
+instead of update
+as begin
+
+	if(UPDATE(Id))
+	begin
+		raiserror('Id cannot be changed', 16, 1)
+		return
+	end
+
+	if (UPDATE(DepartmentName))
+	begin
+		declare @DeptId int
+		select @DeptId = Department.Id
+		from Department
+		join inserted
+		on inserted.DepartmentName = Department.DepartmentName
+
+		if(@DeptId is null)
+		begin
+			raiserror('Invalid Department Name', 16, 1)
+			return
+		end
+
+		update Employee set DepartmentId = @DeptId
+		from inserted
+		join Employee
+		on Employee.Id = inserted.id
+	end
+
+	if(UPDATE(Gender))
+	begin
+		update Employee set Gender = inserted.Gender
+		from inserted
+		join Employee
+		on Employee.Id = inserted.id
+	end
+
+	if(UPDATE(Name))
+	begin
+		update Employee set Name = inserted.Name
+		from inserted
+		join Employee
+		on Employee.Id = inserted.id
+	end
+end
+
+--
+
+update Employee set Name = 'John123', Gender = 'Male', DepartmentId = 3
+where Id = 1
+
+select * from vEmployeeDetails
+
+--teha view, mis kasutab joini ja tabelid on Employee ja Department
+--selectis kasutame veerge DeptId, DeptName ja loendab ridade arvu tabelis
+--lõpus grupitab ära DeptName ja DeptId järgi
+
+create view vEmployeeCount
+as 
+select 
+	DepartmentId, Location, DepartmentName, count(*) as TotalEmployee
+from Employee
+join Department
+on Employee.DepartmentId = Department.Id
+group by DepartmentId, DepartmentName, Location
+
+select * from vEmployeeCount
+
+--näitab ära osakonnad, kus on töötajaid rohkem kui 2 tk
+select DepartmentName from vEmployeeCount
+where TotalEmployee > 2
+
+--kasutame temp tabelit
+select DepartmentName, DepartmentId, COUNT(*) as TotalEmployees
+into #TempEmployeeCount
+from Employee 
+join Department
+on Employee.DepartmentId = Department.Id
+group by DepartmentName, DepartmentId
+
+select * from #TempEmployeeCount
+ 
+--proovime info saada temp tabelist ja kus >= 2 töötajaga osakond
+select DepartmentName, TotalEmployees 
+from #TempEmployeeCount
+where TotalEmployees >= 2
+
+--- kui kustutad InsteadOfDelete triggeri vEmployeeDetailsi alt, siis saab veateate
+-- läbi view kustutamisega
+
+create trigger trEmployeeDetails_InsteadOfDelete
+on vEmployeeDetails
+instead of delete
+as begin
+delete Employee
+from Employee
+join deleted
+on Employee.Id = deleted.Id
+end
+
+delete from vEmployeeDetails where Id = 2
+
+---CTE e common table expression
+
+insert into Employee values(2, 'Mike', 'Male', 2 )
+
+with EmployeeCount(DepartmentName, DepartmentId, TotalEmployees)
+as
+(
+	select DepartmentName, DepartmentId, COUNT(*) as TotalEmployees
+	from Employee 
+	join Department
+	on Employee.DepartmentId = Department.Id
+	group by DepartmentName, DepartmentId
+)
+select DepartmentName, TotalEmployees
+from EmployeeCount
+where TotalEmployees >=2
+
+--CTE-d võivad sarnaneda temp tabeliga
+--on sarnane päritud tabelile ja ei ole salvestatud objektina
+--kestab päringu ulatses
+
+--päritud tabel 
+select DepartmentName, TotalEmployees
+from
+(
+	select DepartmentName, DepartmentId, COUNT(*) as TotalEmployees
+	from Employee 
+	join Department
+	on Employee.DepartmentId = Department.Id
+	group by DepartmentName, DepartmentId
+)
+as EmployeeCount
+where TotalEmployees >=2
+
+---mitu CTE-d järjest
+with EmployeeCountBy_Payroll_IT_Dept(DepartmentName, Total)
+as
+(
+	select DepartmentName, COUNT(Employee.Id) as TotalEmployees
+	from Employee 
+	join Department
+	on Employee.DepartmentId = Department.Id
+	where DepartmentName in('Payroll', 'IT')
+	group by DepartmentName
+),
+--peale koma panemist saab uue CTE juurde kirjutada
+EmployeeCountBy_HR_Admin_Dept(DepartmentName, Total)
+as
+(
+	select DepartmentName, COUNT(Employee.Id) as TotalEmployees
+	from Employee 
+	join Department
+	on Employee.DepartmentId = Department.Id
+	group by DepartmentName
+)
+--kui on kaks CTE.d, siis unioni abil ühendab päringud
+select * from EmployeeCountBy_Payroll_IT_Dept
+union
+select * from EmployeeCountBy_HR_Admin_Dept
+
+---Parem loetavus: CTE-d jagavad keerulised päringud väiksemateks looglisteks 
+--osadeks. Selle asemel, et kasutada sügavalt pesastatud alampäringuid, defineerida
+--sa sammud WITH-klausli abil päringu alguses.
+
+--Koodi taaskasutatavus: Saad defineerida CTE üks kord ja viidata sellele sama päringu
+--piires koruvalt. Hoiab koodi puhtana
+
+--Rekursiivsus: see on CTE eriline omadus. Rekursiivne CTE saab viidata iseendale,
+--mis on hädavajalik hierarghiliste andmete töötlemiseks. 
+
+--lihtsam testimine: kuna iga osa on eraldi nimega plokk, on konkreetseid loogika
+--osi lihtsam kontrollida ja veatuvastust teha.
